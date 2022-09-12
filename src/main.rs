@@ -4,11 +4,11 @@ use serde::Deserialize;
 use std::{
     ffi::OsStr,
     fs,
-    path::{self, Path},
+    path::{self, Path, PathBuf},
 };
 
 use notify::{
-    event::{DataChange::Content, ModifyKind::Data, ModifyKind::Name, RenameMode},
+    event::{ModifyKind::Name, RenameMode},
     Config,
     EventKind::Modify,
     RecommendedWatcher, RecursiveMode, Watcher,
@@ -29,6 +29,57 @@ struct AppConf {
     backup_dir: String,
 }
 
+struct EventFile {
+    paths: Vec<PathBuf>,
+
+    source_str: String,
+    source_path: PathBuf,
+    target_path: PathBuf,
+
+    file_name: String,
+    is_temp_file: bool,
+}
+
+impl EventFile {
+    fn new(paths: &Vec<PathBuf>) -> EventFile {
+        EventFile {
+            paths: paths.clone(),
+
+            source_str: String::new(),
+            source_path: PathBuf::new(),
+            target_path: PathBuf::new(),
+
+            file_name: String::new(),
+            is_temp_file: false,
+        }
+    }
+    fn build_source(mut self) -> EventFile {
+        self.source_str = self.paths[0].to_str().unwrap().to_string();
+        self.source_path = self.paths[0].as_path().to_path_buf();
+        self
+    }
+    fn build_target(mut self) -> EventFile {
+        self.target_path = path::Path::new("backup").join(&self.source_path.file_name().unwrap());
+        self
+    }
+    fn build_file_name_and_extension(mut self) -> EventFile {
+        self.file_name = self
+            .source_path
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        let _extension: &OsStr = OsStr::new("stmp");
+        match self.source_path.extension() {
+            Some(_extension) => self.is_temp_file = true,
+            None => self.is_temp_file = false,
+        }
+        self
+    }
+}
+
 fn read_file_at(path: &str) -> Result<String, std::io::Error> {
     let file = match std::fs::read_to_string(path) {
         Ok(file) => file,
@@ -45,14 +96,6 @@ fn parse_config_from(file: String) -> Result<AppConf, toml::de::Error> {
     Ok(conf)
 }
 
-fn is_temp_file(file: &path::Path) -> bool {
-    let _extension = OsStr::new("stmp");
-    match file.extension() {
-        Some(_extension) => true,
-        None => false,
-    }
-}
-
 fn watch(path: &Path) -> notify::Result<()> {
     let (tx, rx) = std::sync::mpsc::channel();
 
@@ -61,45 +104,39 @@ fn watch(path: &Path) -> notify::Result<()> {
     watcher.watch(path.as_ref(), RecursiveMode::Recursive)?;
 
     let mut event_history: Vec<String> = Vec::new();
-    let mut count = 0;
     for res in rx {
         match res {
             Ok(event) => {
-                count += 1;
-                debug!("{}-- -------------------\n{:?}", count, event);
                 if event.kind == Modify(Name(RenameMode::Any)) {
-                    info!("File changed: {:?}", event.paths[0]);
+                    let event_file = EventFile::new(&event.paths)
+                        .build_source()
+                        .build_target()
+                        .build_file_name_and_extension();
 
-                    let source_str = event.paths[0].to_str().unwrap().to_string();
-                    let source_path = event.paths[0].as_path();
-
-                    // TODO Builder pattern?
-                    if !is_temp_file(source_path) {
+                    if !event_file.is_temp_file {
+                        let _tmp_source = &event_file.source_str;
                         match event_history.last() {
-                            Some(source_str) => {
-                                debug!("File already in event_history: {:?}", &source_str);
-                                let target_path = path::Path::new(source_path.file_name().unwrap());
-
-                                debug!("copying {:?} to {:?}", source_path, target_path);
+                            Some(_tmp_source) => {
+                                debug!(
+                                    "copying {:?} to {:?}",
+                                    &event_file.source_path, &event_file.target_path
+                                );
 
                                 // TODO copy into backup_dir/$datetime
-                                match fs::copy(source_path, target_path) {
-                                    Ok(_) => info!("Copied {:?} to {:?}", source_path, target_path),
+                                match fs::copy(&event_file.source_path, &event_file.target_path) {
+                                    Ok(_) => info!(
+                                        "Copied {:?} to {:?}",
+                                        event_file.source_path, event_file.target_path
+                                    ),
                                     Err(e) => error!("Error copying file: {}", e),
                                 }
                                 event_history.pop();
                             }
                             None => {
-                                event_history.push(source_str);
+                                event_history.push(event_file.source_str);
                             }
                         }
                     }
-                }
-                if event.kind == Modify(Data(Content)) {
-                    debug!(
-                        "File modified: {:?} || {:?} || {:?}",
-                        event.paths, event.attrs, event.kind
-                    );
                 }
             }
             Err(e) => error!("watch error: {:?}", e),
