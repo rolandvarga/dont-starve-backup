@@ -5,7 +5,7 @@ use chrono::Duration;
 use clap::{CommandFactory, Parser};
 use config::AppConf;
 use exitcode;
-use std::path;
+use std::{fs, path};
 
 use notify::{
     event::{ModifyKind::Name, RenameMode},
@@ -24,12 +24,25 @@ struct Cli {
     #[clap(forbid_empty_values = true, validator = validate_arg )]
     /// command to execute. Options include 'monitor|restore'
     command: String,
+
+    #[clap(forbid_empty_values = false, validator = validate_backup_dir )]
+    /// path to the saved backup files
+    backup_dir: String,
 }
 
 fn validate_arg(command: &str) -> Result<(), String> {
     match command {
         "monitor" | "restore" => Ok(()),
         _ => Err(String::from("Invalid command")),
+    }
+}
+
+fn validate_backup_dir(backup_dir: &str) -> Result<(), String> {
+    let path = path::Path::new(backup_dir);
+    if path.exists() {
+        Ok(())
+    } else {
+        Err(String::from("Invalid backup directory"))
     }
 }
 
