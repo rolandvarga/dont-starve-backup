@@ -1,10 +1,11 @@
 mod config;
 mod model;
 
+use chrono::Duration;
 use clap::{CommandFactory, Parser};
 use config::AppConf;
 use exitcode;
-use std::{fs, path};
+use std::path;
 
 use notify::{
     event::{ModifyKind::Name, RenameMode},
@@ -32,36 +33,47 @@ fn watch(cfg: AppConf) -> notify::Result<()> {
 
     watcher.watch(save_dir_path.as_ref(), RecursiveMode::Recursive)?;
 
-    let mut event_history: Vec<String> = Vec::new();
+    let mut event_tracker = model::EventTracker::new();
     for res in rx {
         match res {
             Ok(event) => {
+                if event_tracker.duration_since_last_backup()
+                    >= Duration::seconds(cfg.backup_interval)
+                {
+                    event_tracker.idle = true;
+                }
                 if event.kind == Modify(Name(RenameMode::Any)) {
-                    let event_file = model::EventFile::new(&event.paths)
+                    let mut event_file = model::EventFile::new(&event.paths)
                         .build_source()
-                        .build_target(backup_dir_path)
                         .build_file_name_and_extension();
 
                     if !event_file.is_temp_file {
                         let _tmp_source = &event_file.source_str;
-                        match event_history.last() {
+                        match event_tracker.last() {
                             Some(_tmp_source) => {
                                 debug!(
                                     "copying {:?} to {:?}",
                                     &event_file.source_path, &event_file.target_path
                                 );
-
-                                match fs::copy(&event_file.source_path, &event_file.target_path) {
-                                    Ok(_) => info!(
-                                        "Copied {:?} to {:?}",
-                                        event_file.source_path, event_file.target_path
-                                    ),
-                                    Err(e) => error!("Error copying file: {}", e),
+                                if event_tracker.is_idle() {
+                                    event_tracker.start_cycle();
+                                } else {
+                                    event_tracker.update_last_backup();
                                 }
-                                event_history.pop();
+
+                                event_file = event_file.build_target(
+                                    &backup_dir_path.join(
+                                        event_tracker
+                                            .current_cycle
+                                            .format("%Y%m%d_%H%M%S")
+                                            .to_string(),
+                                    ),
+                                );
+                                event_file.copy_to_target();
+                                event_tracker.pop();
                             }
                             None => {
-                                event_history.push(event_file.source_str);
+                                event_tracker.push(event_file.source_str);
                             }
                         }
                     }
@@ -74,24 +86,24 @@ fn watch(cfg: AppConf) -> notify::Result<()> {
 }
 
 fn main() {
-    pretty_env_logger::init(); // TODO use try_init() instead
+    pretty_env_logger::init();
 
-    let cfg: AppConf = AppConf::new("config.toml");
-    let args = Cli::parse();
+    let _cfg: AppConf = AppConf::new("config.toml");
+    let _args = Cli::parse();
 
-    match args.command.as_str() {
+    match _args.command.as_str() {
         "backup" => {
             info!("starting in backup mode");
             // start a thread that keeps monitoring the save_dir
             // and copies any new files to the backup_dir when there's a change
-            if let Err(e) = watch(cfg) {
+            if let Err(e) = watch(_cfg) {
                 error!("Error watching save_dir: {}", e);
                 std::process::exit(exitcode::OSERR);
             }
         }
         "restore" => {
             info!("starting in restore mode");
-            // copy all files from the backup_dir to the save_dir
+            // TODO copy all files from the backup_dir to the save_dir
         }
         _ => {
             Cli::command().print_help().unwrap();

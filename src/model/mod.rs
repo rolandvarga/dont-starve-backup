@@ -1,7 +1,56 @@
 use std::{
     ffi::OsStr,
+    fs, path,
     path::{Path, PathBuf},
 };
+
+use chrono::{DateTime, Duration, Local};
+
+pub struct EventTracker {
+    history: Vec<String>,
+
+    pub idle: bool,
+    pub current_cycle: DateTime<Local>, // timestamp of current backup cycle
+    pub last_backup: DateTime<Local>,   // actual timestamp of last backup
+}
+
+impl EventTracker {
+    pub fn new() -> EventTracker {
+        let now = Local::now();
+        EventTracker {
+            history: Vec::new(),
+            idle: true,
+            current_cycle: now,
+            last_backup: now,
+        }
+    }
+    pub fn push(&mut self, event: String) {
+        self.history.push(event);
+    }
+    pub fn pop(&mut self) {
+        self.history.pop();
+    }
+    pub fn last(&self) -> Option<&String> {
+        self.history.last()
+    }
+    pub fn is_idle(&self) -> bool {
+        self.idle == true
+    }
+    pub fn start_cycle(&mut self) {
+        self.idle = false;
+        self.update_current_cycle();
+        self.update_last_backup();
+    }
+    pub fn update_current_cycle(&mut self) {
+        self.current_cycle = Local::now();
+    }
+    pub fn update_last_backup(&mut self) {
+        self.last_backup = Local::now();
+    }
+    pub fn duration_since_last_backup(&self) -> Duration {
+        Local::now() - self.last_backup
+    }
+}
 
 pub struct EventFile {
     paths: Vec<PathBuf>,
@@ -52,5 +101,16 @@ impl EventFile {
             None => self.is_temp_file = false,
         }
         self
+    }
+    pub fn copy_to_target(self) {
+        let parent_dir = &self.target_path.parent().unwrap();
+        fs::create_dir_all(path::Path::new(parent_dir)).unwrap_or_else(|e| {
+            error!("Error creating directory '{:?}': {}", parent_dir, e);
+            std::process::exit(exitcode::OSERR);
+        });
+        match fs::copy(&self.source_path, &self.target_path) {
+            Ok(_) => info!("Copied {:?} to {:?}", &self.source_path, &self.target_path),
+            Err(e) => error!("Error copying file: {}", e),
+        }
     }
 }
