@@ -111,7 +111,7 @@ fn watch(cfg: AppConf) -> notify::Result<()> {
 fn main() {
     pretty_env_logger::init();
 
-    let _cfg: AppConf = AppConf::new("config.toml");
+    let cfg: AppConf = AppConf::new("config.toml");
     let _args = Cli::parse();
 
     match _args.command.as_str() {
@@ -119,7 +119,7 @@ fn main() {
             info!("starting in backup mode");
             // start a thread that keeps monitoring the save_dir
             // and copies any new files to the backup_dir when there's a change
-            if let Err(e) = watch(_cfg) {
+            if let Err(e) = watch(cfg) {
                 error!("Error watching save_dir: {}", e);
                 std::process::exit(exitcode::OSERR);
             }
@@ -134,7 +134,7 @@ fn main() {
                             Ok(entry) => {
                                 if entry.file_type().unwrap().is_file() {
                                     let entry_path = entry.path();
-                                    let restore_path = path::Path::new(&_cfg.save_dir)
+                                    let restore_path = path::Path::new(&cfg.save_dir)
                                         .join(entry_path.file_name().unwrap());
 
                                     fs::copy(&entry_path, &restore_path).unwrap_or_else(|e| {
