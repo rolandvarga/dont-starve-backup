@@ -41,7 +41,7 @@ impl EventTracker {
         self.update_current_cycle();
         self.update_last_backup();
     }
-    pub fn update_current_cycle(&mut self) {
+    fn update_current_cycle(&mut self) {
         self.current_cycle = Local::now();
     }
     pub fn update_last_backup(&mut self) {
@@ -82,7 +82,6 @@ impl EventFile {
         self
     }
     pub fn build_target(mut self, prefix: &Path) -> EventFile {
-        // TODO should handle backupdir/$datetime
         self.target_path = prefix.join(&self.source_path.file_name().unwrap());
         self
     }
