@@ -13,10 +13,14 @@ backup_dir = "/Users/administrator/code/dont-starve-backup/backup"
 cycle_interval = 10
 ```
 
-To create backups the tool needs to be run with the following command:
+The tool needs to be run with the following command to start monitoring the save files:
 
 ```bash
 ./dont-starve-backup monitor
 ```
 
-TODO: add restore steps
+To restore a backup, use the following command and pass the directory name that contains the save files:
+
+```bash
+./dont-starve-backup restore 20220912_232323
+```
