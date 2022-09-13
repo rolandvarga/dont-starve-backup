@@ -126,7 +126,38 @@ fn main() {
         }
         "restore" => {
             info!("starting in restore mode");
-            // TODO copy all files from the backup_dir to the save_dir
+            let backup_dir_path = path::Path::new(_args.backup_dir.as_str());
+            match fs::read_dir(backup_dir_path) {
+                Ok(entries) => {
+                    for entry in entries {
+                        match entry {
+                            Ok(entry) => {
+                                if entry.file_type().unwrap().is_file() {
+                                    let entry_path = entry.path();
+                                    let restore_path = path::Path::new(&_cfg.save_dir)
+                                        .join(entry_path.file_name().unwrap());
+
+                                    fs::copy(&entry_path, &restore_path).unwrap_or_else(|e| {
+                                        error!(
+                                            "Error copying {:?} to {:?}: {}",
+                                            entry_path, restore_path, e
+                                        );
+                                        std::process::exit(exitcode::IOERR);
+                                    });
+                                }
+                            }
+                            Err(e) => {
+                                error!("Error reading entry: {}", e);
+                                std::process::exit(exitcode::IOERR);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Error reading restore_dir: {}", e);
+                    std::process::exit(exitcode::IOERR);
+                }
+            }
         }
         _ => {
             Cli::command().print_help().unwrap();
