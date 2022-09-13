@@ -19,8 +19,18 @@ extern crate pretty_env_logger;
 extern crate log;
 
 #[derive(Parser)]
+#[clap(author = "rolandvarga", version, about = "A simple backup utility")]
 struct Cli {
+    #[clap(forbid_empty_values = true, validator = validate_arg )]
+    /// command to execute. Options include 'backup|restore'
     command: String,
+}
+
+fn validate_arg(command: &str) -> Result<(), String> {
+    match command {
+        "backup" | "restore" => Ok(()),
+        _ => Err(String::from("Invalid command")),
+    }
 }
 
 fn watch(cfg: AppConf) -> notify::Result<()> {
