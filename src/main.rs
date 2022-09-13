@@ -27,7 +27,7 @@ struct Cli {
 
     #[clap(forbid_empty_values = false, validator = validate_backup_dir )]
     /// path to the saved backup files
-    backup_dir: String,
+    backup_dir: Option<String>,
 }
 
 fn validate_arg(command: &str) -> Result<(), String> {
@@ -112,9 +112,9 @@ fn main() {
     pretty_env_logger::init();
 
     let cfg: AppConf = AppConf::new("config.toml");
-    let _args = Cli::parse();
+    let args = Cli::parse();
 
-    match _args.command.as_str() {
+    match args.command.as_str() {
         "monitor" => {
             info!("starting in backup mode");
             // start a thread that keeps monitoring the save_dir
@@ -126,7 +126,8 @@ fn main() {
         }
         "restore" => {
             info!("starting in restore mode");
-            let backup_dir_path = path::Path::new(_args.backup_dir.as_str());
+            let backup_dir_str = args.backup_dir.unwrap();
+            let backup_dir_path = path::Path::new(backup_dir_str.as_str());
             match fs::read_dir(backup_dir_path) {
                 Ok(entries) => {
                     for entry in entries {
