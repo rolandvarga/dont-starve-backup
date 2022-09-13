@@ -22,13 +22,13 @@ extern crate log;
 #[clap(author = "rolandvarga", version, about = "A simple backup utility")]
 struct Cli {
     #[clap(forbid_empty_values = true, validator = validate_arg )]
-    /// command to execute. Options include 'backup|restore'
+    /// command to execute. Options include 'monitor|restore'
     command: String,
 }
 
 fn validate_arg(command: &str) -> Result<(), String> {
     match command {
-        "backup" | "restore" => Ok(()),
+        "monitor" | "restore" => Ok(()),
         _ => Err(String::from("Invalid command")),
     }
 }
@@ -48,7 +48,7 @@ fn watch(cfg: AppConf) -> notify::Result<()> {
         match res {
             Ok(event) => {
                 if event_tracker.duration_since_last_backup()
-                    >= Duration::seconds(cfg.backup_interval)
+                    >= Duration::seconds(cfg.cycle_interval)
                 {
                     event_tracker.idle = true;
                 }
@@ -102,7 +102,7 @@ fn main() {
     let _args = Cli::parse();
 
     match _args.command.as_str() {
-        "backup" => {
+        "monitor" => {
             info!("starting in backup mode");
             // start a thread that keeps monitoring the save_dir
             // and copies any new files to the backup_dir when there's a change

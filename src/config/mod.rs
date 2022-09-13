@@ -5,7 +5,7 @@ pub struct AppConf {
     pub save_dir: String,
     pub backup_dir: String,
 
-    pub backup_interval: i64,
+    pub cycle_interval: i64,
 }
 
 impl AppConf {
