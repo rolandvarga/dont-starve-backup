@@ -1,14 +1,14 @@
+mod config;
+mod model;
+
+use chrono::Duration;
 use clap::{CommandFactory, Parser};
+use config::AppConf;
 use exitcode;
-use serde::Deserialize;
-use std::{
-    ffi::OsStr,
-    fs,
-    path::{self, Path},
-};
+use std::{fs, path};
 
 use notify::{
-    event::{DataChange::Content, ModifyKind::Data, ModifyKind::Name, RenameMode},
+    event::{ModifyKind::Name, RenameMode},
     Config,
     EventKind::Modify,
     RecommendedWatcher, RecursiveMode, Watcher,
@@ -19,87 +19,87 @@ extern crate pretty_env_logger;
 extern crate log;
 
 #[derive(Parser)]
+#[clap(author = "rolandvarga", version, about = "A simple backup utility")]
 struct Cli {
+    #[clap(forbid_empty_values = true, validator = validate_arg )]
+    /// command to execute. Options include 'monitor|restore'
     command: String,
+
+    #[clap(forbid_empty_values = false, validator = validate_backup_dir )]
+    /// path to the saved backup files
+    backup_dir: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
-struct AppConf {
-    save_dir: String,
-    backup_dir: String,
-}
-
-fn read_file_at(path: &str) -> Result<String, std::io::Error> {
-    let file = match std::fs::read_to_string(path) {
-        Ok(file) => file,
-        Err(e) => return Err(e),
-    };
-    Ok(file)
-}
-
-fn parse_config_from(file: String) -> Result<AppConf, toml::de::Error> {
-    let conf: AppConf = match toml::from_str(&file) {
-        Ok(conf) => conf,
-        Err(e) => return Err(e),
-    };
-    Ok(conf)
-}
-
-fn is_temp_file(file: &path::Path) -> bool {
-    let _extension = OsStr::new("stmp");
-    match file.extension() {
-        Some(_extension) => true,
-        None => false,
+fn validate_arg(command: &str) -> Result<(), String> {
+    match command {
+        "monitor" | "restore" => Ok(()),
+        _ => Err(String::from("Invalid command")),
     }
 }
 
-fn watch(path: &Path) -> notify::Result<()> {
+fn validate_backup_dir(backup_dir: &str) -> Result<(), String> {
+    let path = path::Path::new(backup_dir);
+    if path.exists() {
+        Ok(())
+    } else {
+        Err(String::from("Invalid backup directory"))
+    }
+}
+
+fn watch(cfg: AppConf) -> notify::Result<()> {
+    let save_dir_path = path::Path::new(&cfg.save_dir);
+    let backup_dir_path = path::Path::new(&cfg.backup_dir);
+
     let (tx, rx) = std::sync::mpsc::channel();
 
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
 
-    watcher.watch(path.as_ref(), RecursiveMode::Recursive)?;
+    watcher.watch(save_dir_path.as_ref(), RecursiveMode::Recursive)?;
 
-    let mut event_history: Vec<String> = Vec::new();
-    let mut count = 0;
+    let mut event_tracker = model::EventTracker::new();
     for res in rx {
         match res {
             Ok(event) => {
-                count += 1;
-                debug!("{}-- -------------------\n{:?}", count, event);
+                if event_tracker.duration_since_last_backup()
+                    >= Duration::seconds(cfg.cycle_interval)
+                {
+                    event_tracker.idle = true;
+                }
                 if event.kind == Modify(Name(RenameMode::Any)) {
-                    info!("File changed: {:?}", event.paths[0]);
+                    let mut event_file = model::EventFile::new(&event.paths)
+                        .build_source()
+                        .build_file_name_and_extension();
 
-                    let source_str = event.paths[0].to_str().unwrap().to_string();
-                    let source_path = event.paths[0].as_path();
-
-                    // TODO Builder pattern?
-                    if !is_temp_file(source_path) {
-                        match event_history.last() {
-                            Some(source_str) => {
-                                debug!("File already in event_history: {:?}", &source_str);
-                                let target_path = path::Path::new(source_path.file_name().unwrap());
-
-                                debug!("copying {:?} to {:?}", source_path, target_path);
-
-                                // TODO copy into backup_dir/$datetime
-                                match fs::copy(source_path, target_path) {
-                                    Ok(_) => info!("Copied {:?} to {:?}", source_path, target_path),
-                                    Err(e) => error!("Error copying file: {}", e),
+                    if !event_file.is_temp_file {
+                        let _tmp_source = &event_file.source_str;
+                        match event_tracker.last() {
+                            Some(_tmp_source) => {
+                                debug!(
+                                    "copying {:?} to {:?}",
+                                    &event_file.source_path, &event_file.target_path
+                                );
+                                if event_tracker.is_idle() {
+                                    event_tracker.start_cycle();
+                                } else {
+                                    event_tracker.update_last_backup();
                                 }
-                                event_history.pop();
+
+                                event_file = event_file.build_target(
+                                    &backup_dir_path.join(
+                                        event_tracker
+                                            .current_cycle
+                                            .format("%Y%m%d_%H%M%S")
+                                            .to_string(),
+                                    ),
+                                );
+                                event_file.copy_to_target();
+                                event_tracker.pop();
                             }
                             None => {
-                                event_history.push(source_str);
+                                event_tracker.push(event_file.source_str);
                             }
                         }
                     }
-                }
-                if event.kind == Modify(Data(Content)) {
-                    debug!(
-                        "File modified: {:?} || {:?} || {:?}",
-                        event.paths, event.attrs, event.kind
-                    );
                 }
             }
             Err(e) => error!("watch error: {:?}", e),
@@ -109,33 +109,48 @@ fn watch(path: &Path) -> notify::Result<()> {
 }
 
 fn main() {
-    pretty_env_logger::init(); // TODO use try_init() instead
+    pretty_env_logger::init();
 
-    let file = read_file_at("config.toml").unwrap_or_else(|e| {
-        eprintln!("Error reading config file: {}", e);
-        std::process::exit(exitcode::OSFILE);
-    });
-
-    let cfg: AppConf = parse_config_from(file).unwrap_or_else(|e| {
-        eprintln!("Error parsing config file: {}", e);
-        std::process::exit(exitcode::CONFIG);
-    });
-
+    let cfg: AppConf = AppConf::new("config.toml");
     let args = Cli::parse();
+
     match args.command.as_str() {
-        "backup" => {
+        "monitor" => {
             info!("starting in backup mode");
             // start a thread that keeps monitoring the save_dir
             // and copies any new files to the backup_dir when there's a change
-            let path = path::Path::new(&cfg.save_dir);
-            if let Err(e) = watch(path) {
+            if let Err(e) = watch(cfg) {
                 error!("Error watching save_dir: {}", e);
                 std::process::exit(exitcode::OSERR);
             }
         }
         "restore" => {
             info!("starting in restore mode");
-            // copy all files from the backup_dir to the save_dir
+            let backup_dir_str = args.backup_dir.unwrap();
+            let backup_dir_path = path::Path::new(backup_dir_str.as_str());
+            match fs::read_dir(backup_dir_path) {
+                Ok(entries) => {
+                    for entry in entries {
+                        match entry {
+                            Ok(entry) => {
+                                if entry.file_type().unwrap().is_file() {
+                                    let restore_file =
+                                        model::RestoreFile::new(&cfg.save_dir, &entry);
+                                    restore_file.copy();
+                                }
+                            }
+                            Err(e) => {
+                                error!("Error reading entry: {}", e);
+                                std::process::exit(exitcode::IOERR);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    error!("Error reading restore_dir: {}", e);
+                    std::process::exit(exitcode::IOERR);
+                }
+            }
         }
         _ => {
             Cli::command().print_help().unwrap();
