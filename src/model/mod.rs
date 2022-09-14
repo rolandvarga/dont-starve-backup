@@ -1,6 +1,7 @@
 use std::{
     ffi::OsStr,
-    fs, path,
+    fs::{self, DirEntry},
+    path,
     path::{Path, PathBuf},
 };
 
@@ -111,5 +112,31 @@ impl EventFile {
             Ok(_) => info!("Copied {:?} to {:?}", &self.source_path, &self.target_path),
             Err(e) => error!("Error copying file: {}", e),
         }
+    }
+}
+
+pub struct RestoreFile {
+    pub source_path: PathBuf,
+    pub target_path: PathBuf,
+}
+
+impl RestoreFile {
+    pub fn new(save_dir: &String, entry: &DirEntry) -> RestoreFile {
+        let source_path = entry.path();
+        let target_path = path::Path::new(&save_dir).join(source_path.file_name().unwrap());
+        RestoreFile {
+            source_path,
+            target_path,
+        }
+    }
+    pub fn copy(self) {
+        fs::copy(&self.source_path, &self.target_path).unwrap_or_else(|e| {
+            error!(
+                "Error copying {:?} to {:?}: {}",
+                self.source_path, self.target_path, e
+            );
+            std::process::exit(exitcode::IOERR);
+        });
+        info!("Copied {:?} to {:?}", self.source_path, self.target_path);
     }
 }

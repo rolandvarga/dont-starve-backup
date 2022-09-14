@@ -134,17 +134,9 @@ fn main() {
                         match entry {
                             Ok(entry) => {
                                 if entry.file_type().unwrap().is_file() {
-                                    let entry_path = entry.path();
-                                    let restore_path = path::Path::new(&cfg.save_dir)
-                                        .join(entry_path.file_name().unwrap());
-
-                                    fs::copy(&entry_path, &restore_path).unwrap_or_else(|e| {
-                                        error!(
-                                            "Error copying {:?} to {:?}: {}",
-                                            entry_path, restore_path, e
-                                        );
-                                        std::process::exit(exitcode::IOERR);
-                                    });
+                                    let restore_file =
+                                        model::RestoreFile::new(&cfg.save_dir, &entry);
+                                    restore_file.copy();
                                 }
                             }
                             Err(e) => {

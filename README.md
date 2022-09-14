@@ -16,11 +16,31 @@ cycle_interval = 10
 The tool needs to be run with the following command to start monitoring the save files:
 
 ```bash
-./dont-starve-backup monitor
+RUST_LOG=info ./dont-starve-backup monitor
+
+## Sample output
+RUST_LOG=info ./target/release/dont-starve-backup monitor
+INFO  dont_starve_backup > starting in backup mode
+INFO  dont_starve_backup::model > Copied "/Users/administrator/Library/Application Support/Steam/userdata/123456789/219740/remote/boot_modindex" to "/Users/administrator/_Kompi/rust/dont-starve-backup/backup/20220914_100508/boot_modindex"
+INFO  dont_starve_backup::model > Copied "/Users/administrator/Library/Application Support/Steam/userdata/123456789/219740/remote/saveindex" to "/Users/administrator/_Kompi/rust/dont-starve-backup/backup/20220914_100508/saveindex"
+INFO  dont_starve_backup::model > Copied "/Users/administrator/Library/Application Support/Steam/userdata/123456789/219740/remote/saveindex" to "/Users/administrator/_Kompi/rust/dont-starve-backup/backup/20220914_100508/saveindex"
+INFO  dont_starve_backup::model > Copied "/Users/administrator/Library/Application Support/Steam/userdata/123456789/219740/remote/modindex" to "/Users/administrator/_Kompi/rust/dont-starve-backup/backup/20220914_100508/modindex"
+INFO  dont_starve_backup::model > Copied "/Users/administrator/Library/Application Support/Steam/userdata/123456789/219740/remote/boot_modindex" to "/Users/administrator/_Kompi/rust/dont-starve-backup/backup/20220914_100508/boot_modindex"
+INFO  dont_starve_backup::model > Copied "/Users/administrator/Library/Application Support/Steam/userdata/123456789/219740/remote/motd_image" to "/Users/administrator/_Kompi/rust/dont-starve-backup/backup/20220914_100508/motd_image"
+INFO  dont_starve_backup::model > Copied "/Users/administrator/Library/Application Support/Steam/userdata/123456789/219740/remote/motd_image" to "/Users/administrator/_Kompi/rust/dont-starve-backup/backup/20220914_100508/motd_image"
 ```
 
 To restore a backup, use the following command and pass the directory name that contains the save files:
 
 ```bash
-./dont-starve-backup restore 20220912_232323
+RUST_LOG=info ./dont-starve-backup restore 20220912_232323
+
+
+## Sample output
+RUST_LOG=info ./target/release/dont-starve-backup restore backup/20220914_100233
+INFO  dont_starve_backup > starting in restore mode
+INFO  dont_starve_backup::model > Copied "backup/20220914_100233/motd_image" to "/Users/administrator/Library/Application Support/Steam/userdata/123456789/219740/remote/motd_image"
+INFO  dont_starve_backup::model > Copied "backup/20220914_100233/saveindex" to "/Users/administrator/Library/Application Support/Steam/userdata/123456789/219740/remote/saveindex"
+INFO  dont_starve_backup::model > Copied "backup/20220914_100233/boot_modindex" to "/Users/administrator/Library/Application Support/Steam/userdata/123456789/219740/remote/boot_modindex"
+INFO  dont_starve_backup::model > Copied "backup/20220914_100233/modindex" to "/Users/administrator/Library/Application Support/Steam/userdata/123456789/219740/remote/modindex"
 ```
