@@ -44,3 +44,6 @@ INFO  dont_starve_backup::model > Copied "backup/20220914_100233/saveindex" to "
 INFO  dont_starve_backup::model > Copied "backup/20220914_100233/boot_modindex" to "/Users/administrator/Library/Application Support/Steam/userdata/123456789/219740/remote/boot_modindex"
 INFO  dont_starve_backup::model > Copied "backup/20220914_100233/modindex" to "/Users/administrator/Library/Application Support/Steam/userdata/123456789/219740/remote/modindex"
 ```
+
+## Note on Usage
+The tool was only tested on an M1 Mac. No guarantees to work on other OS.
